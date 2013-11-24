@@ -7,7 +7,7 @@
 #define PPM_FrLen 22500		// set the PPM frame length (us)
 #define PPM_PulseLen 300	// set the pulse length (us)
 #define S_PPM_PIN 3			// set PPM signal output pin
-#define RC_PPM_PIN 2		// set PPM signal input pin
+#define RC_PPM_PIN 21		// set PPM signal input pin
 #define CH_THROTTLE 2		// Set Throttle PPM channel
 #define CH_YAW 0			// Set Yaw PPM channel
 #define CH_PITCH 1			// Set Pitch PPM channel
@@ -20,7 +20,6 @@ int rc_ppm[8];
 int s_ppm[8];
 
 void setup(){
-	Serial.begin(9600);	// Start serial communications
 	pinMode(S_PPM_PIN, OUTPUT);
 	pinMode(RC_PPM_PIN, INPUT);
 	cli();	// disable interrupts
@@ -34,18 +33,27 @@ void setup(){
 	OCR3A = 100;	// compare match register, set to dummy value to start
 	TCCR3B |= (1 << WGM12);	// turn on Clear Timer on Compare mode
 	TCCR3B |= (1 << CS11);	// 8 prescaler: 0.5 us @ 16 MHz
-	TIMSK1 |= (1 << OCIE1A);	// emable timer compare interrupt
+	TIMSK3 |= (1 << OCIE1A);	// emable timer compare interrupt
 	
 	TCCR1B |= (1 << CS11);	// 8 prescaler: 0.5 us @ 16 MHz
 	EIMSK |= (1 << INT0);	// enable extermal interrupt on pin 2
 	EICRA |= (1 << ISC01);	// Trigger INT0 on falling edge
 	sei();	// enable interrupts
+	
+	s_ppm[0] = 900;
+	s_ppm[1] = 900;
+	s_ppm[2] = 900;
+	s_ppm[3] = 900;
+	s_ppm[4] = 900;
+	s_ppm[5] = 900;
+	s_ppm[6] = 900;
+	s_ppm[7] = 900;
 }
 
 void loop(){
 }
-
-ISR(EXT_INT0_vect){	// Falling edge interrupt for RC_PPM
+/*
+ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 	static unsigned int pulse;
 	static unsigned long counter;
 	static byte channel;
@@ -60,7 +68,7 @@ ISR(EXT_INT0_vect){	// Falling edge interrupt for RC_PPM
 		rc_ppm[channel] = (counter + pulse) / 2;
 		channel++;
 	}
-}
+}*/
 
 ISR(TIMER3_COMPA_vect){
 	static boolean state = true;	// set initial state
@@ -68,14 +76,14 @@ ISR(TIMER3_COMPA_vect){
 	TCNT3 = 0;	// reset timer
 	
 	if(state){	// start pulse
-		digitalWrite(S_PPM_Pin, LOW);
+		digitalWrite(S_PPM_PIN, LOW);
 		OCR3A = 600;	// timeout at 300 us
 		state = false;
 	}else{	// end pulse and calculate when to start next
 		static byte cur_chan_num;
-		satic unsigned int calc_rest;
+		static unsigned int calc_rest;
 		
-		digitalWrite(S_PPM_Pin, HIGH);
+		digitalWrite(S_PPM_PIN, HIGH);
 		state = true;
 		
 		if(cur_chan_num >= 8){
