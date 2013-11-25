@@ -22,6 +22,8 @@ int s_ppm[8];
 void setup(){
 	pinMode(S_PPM_PIN, OUTPUT);
 	pinMode(RC_PPM_PIN, INPUT);
+	pinMode(13, OUTPUT);
+	digitalWrite(13, HIGH);
 	cli();	// disable interrupts
 	TCCR1A = 0;	// Clear timer 1 control register a
 	TCCR1B = 0;	// Clear timer 1 control register b
@@ -54,6 +56,7 @@ void loop(){
 }
 
 ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
+	PORTB &= ~(1 << PORTB7);
 	static unsigned int pulse;
 	static unsigned long counter;
 	static byte channel;
@@ -68,22 +71,26 @@ ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 		rc_ppm[channel] = (counter + pulse) / 2;
 		channel++;
 	}
+	PORTB |= (1 << PORTB7);
 }
 
-ISR(TIMER3_COMPA_vect){
+ISR(TIMER3_COMPA_vect){	
+	PORTB &= ~(1 << PORTB7);
 	static boolean state = true;	// set initial state
 	
 	TCNT3 = 0;	// reset timer
 	
 	if(state){	// start pulse
-		digitalWrite(S_PPM_PIN, LOW);
+		// digitalWrite(S_PPM_PIN, LOW);
+		PORTE &= ~(1 << PORTE5);
 		OCR3A = 600;	// timeout at 300 us
 		state = false;
 	}else{	// end pulse and calculate when to start next
 		static byte cur_chan_num;
 		static unsigned int calc_rest;
 		
-		digitalWrite(S_PPM_PIN, HIGH);
+		// digitalWrite(S_PPM_PIN, HIGH);
+		PORTE |= (1 << PORTE5);
 		state = true;
 		
 		if(cur_chan_num >= 8){
@@ -97,4 +104,5 @@ ISR(TIMER3_COMPA_vect){
 			cur_chan_num++;
 		}
 	}
+	PORTB |= (1 << PORTB7);
 }
