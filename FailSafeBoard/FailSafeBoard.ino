@@ -52,7 +52,7 @@ void setup(){
 
 void loop(){
 }
-/*
+
 ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 	static unsigned int pulse;
 	static unsigned long counter;
@@ -68,7 +68,7 @@ ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 		rc_ppm[channel] = (counter + pulse) / 2;
 		channel++;
 	}
-}*/
+}
 
 ISR(TIMER3_COMPA_vect){
 	static boolean state = true;	// set initial state
