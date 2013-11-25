@@ -18,12 +18,16 @@
 
 int rc_ppm[8];
 int s_ppm[8];
+int flags = 0;	// bit 0 is Serial Available
+String inputString = "";
 
 void setup(){
+	Serial.begin(9600);
 	pinMode(S_PPM_PIN, OUTPUT);
 	pinMode(RC_PPM_PIN, INPUT);
 	pinMode(13, OUTPUT);
-	digitalWrite(13, HIGH);
+	pinMode(12, OUTPUT);
+	digitalWrite(13, LOW);
 	cli();	// disable interrupts
 	TCCR1A = 0;	// Clear timer 1 control register a
 	TCCR1B = 0;	// Clear timer 1 control register b
@@ -53,10 +57,44 @@ void setup(){
 }
 
 void loop(){
+	if(inputString.length())
+		Serial.println(inputString);
+	inputString = "";
+	/* if(flags){
+		PORTB |= (1 << PORTB7);
+	}else{
+		PORTB &= ~(1 << PORTB7);
+	}
+	if(flags & (1 << 1)){
+		char readChar = inputString.charAt(0);
+		switch(readChar){
+			case 97:
+				digitalWrite(12, HIGH);
+				//PORTB |= (1 << PORTB6);
+				break;
+			case 98:
+				digitalWrite(12, LOW);
+				//PORTB &= ~(1 << PORTB6);
+				break;
+			default:
+				digitalWrite(12, LOW);
+				//PORTB &= ~(1 << PORTB6);
+				break;
+		}
+		flags ^= (1 << 1);
+	} */
+	delay(10);
+}
+
+void SerialEvent(){
+	while(Serial.available()){
+		char inChar = (char)Serial.read();
+		inputString += inChar;
+		//flags |= (1 << 1);
+	}
 }
 
 ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
-	PORTB &= ~(1 << PORTB7);
 	static unsigned int pulse;
 	static unsigned long counter;
 	static byte channel;
@@ -71,11 +109,9 @@ ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 		rc_ppm[channel] = (counter + pulse) / 2;
 		channel++;
 	}
-	PORTB |= (1 << PORTB7);
 }
 
 ISR(TIMER3_COMPA_vect){	
-	PORTB &= ~(1 << PORTB7);
 	static boolean state = true;	// set initial state
 	
 	TCNT3 = 0;	// reset timer
@@ -104,5 +140,4 @@ ISR(TIMER3_COMPA_vect){
 			cur_chan_num++;
 		}
 	}
-	PORTB |= (1 << PORTB7);
 }
