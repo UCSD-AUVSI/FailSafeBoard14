@@ -7,17 +7,31 @@
 /////////////////////////CONFIGURATION/////////////////////////////////////////
 #define PPM_FrLen 22500		// set the PPM frame length (us)
 #define PPM_PulseLen 300	// set the pulse length (us)
-#define CH_THROTTLE 2		// Set Throttle PPM channel
-#define CH_YAW 0			// Set Yaw PPM channel
-#define CH_PITCH 1			// Set Pitch PPM channel
-#define CH_ROLL 3			// Set Roll PPM channel
-#define CH_AUX 4			// Set Aux PPM channel
+#define CH_AIL 0			// Set Roll PPM channel
+#define CH_ELE 1			// Set Pitch PPM channel
+#define CH_THR 2			// Set Throttle PPM channel
+#define CH_RUD 3			// Set Yaw PPM channel
+#define CH_MOD 7			// Set Mode PPM channel
+#define CH_AUX 5			// Set Aux PPM channel
+#define RC_RTH 600			// Set RTH mode length
 /////////////////////////CONFIGURATION/////////////////////////////////////////
- 
+
+////////////////////////PROGRAM SPECIFIC CONSTANTS/////////////////////////////
+#define SAVAIL 0			// Serial Available bit
+#define RCHLTH 1			// RC PPM Health (1 is bad health, 0 is good)
+#define FSMOD1 2			// Failsafe Mode 1
+#define FSMOD2 3			// Failsafe Mode 1
+////////////////////////PROGRAM SPECIFIC CONSTANTS/////////////////////////////
 
 int rc_ppm[8];
-int s_ppm[8];
+int s_ppm[8] = {900, 900, 900, 900, 900, 900, 900, 900};
 char flags = 0;	// bit 0 is Serial Available, bit 1 is Bad RC PPM Health
+/***********************FLAG DESCRIPTIONS**************************************
+ * 0	Serial Available
+ * 1	Bad RC PPM Health
+ * 2	Failsafe Mode 1
+ * 3	Failsafe Mode 2
+ *****************************************************************************/
 int busyflag = 0;	
 String inputString = "";
 
@@ -38,8 +52,8 @@ void setup(){
 	
 	// S_PPM Setup
 	TCCR3A = 0;	// Clear timer 3 control regsiter a
-	OCR3A = 100;	// compare match register, set to dummy value to start
-	TCCR3B = 0 | (1 << WGM32) | (1 < CS31);
+	OCR3A = 1000;	// compare match register, set to dummy value to start
+	TCCR3B = (1 << WGM32) | (1 << CS31);
 	// turn on Clear Timer on Compare mode, set 8 prescaler: 0.5 us @ 16 MHz
 	TIMSK3 |= (1 << OCIE3A);	// enable timer compare interrupt
 	
@@ -51,15 +65,12 @@ void setup(){
 	EIMSK |= (1 << INT0);	// enable extermal interrupt on pin 2
 	EICRA |= (1 << ISC01);	// Trigger INT0 on falling edge
 	
-	s_ppm[0] = 900;		// Set default s_ppm values
-	s_ppm[1] = 900;
-	s_ppm[2] = 900;
-	s_ppm[3] = 900;
-	s_ppm[4] = 900;
-	s_ppm[5] = 900;
-	s_ppm[6] = 900;
-	s_ppm[7] = 900;
-	
+	// FS_CLK Setup
+	TCCR4A = 0;	// Clear control setup
+	OCR4A = 46875;	// 3 seconds at 1024 prescaler
+	TCCR4B = (1 << WGM42);	// turn on CTC mode
+	TIMSK4 |= (1 << OCIE4A);	// enable timer compare interrupt
+		
 	sei();	// reenable interrupts
 }
 
@@ -68,13 +79,14 @@ void loop(){
 		char inChar = (char)Serial.read();
 		inputString += inChar;
 		flags |= (1 << 0);
-	}
+	}	
+	
 	if(flags){
 		// PORTB |= (1 << ON_TIME_PIN);
 	}else{
 		// PORTB &= ~(1 << ON_TIME_PIN);
 	}
-	if(flags & (1 << 0)){
+	if(flags & (1 << SAVAIL)){
 		char readChar = inputString.charAt(0);
 		switch(readChar){
 			case 97:
@@ -87,18 +99,29 @@ void loop(){
 				PORTB &= ~(1 << PORTB4);
 				break;
 		}
-		flags ^= (1 << 0);
+		flags ^= (1 << SAVAIL);
 		inputString = "";
 	}
-	if(flags & (1 << 1)){	// RC_PPM Health Bad
+	if(flags & (1 << RCHLTH)){	// RC_PPM Health Bad
 		PORTB |= (1 << PORTB5);	// if flag is set, set port high
 	}else{
 		PORTB &= ~(1 << PORTB5);	// if flag not set, set port low
 	}
+	if(flags & (1 << FSMOD1)){	// Failsafe Mode 1
+		s_ppm[0] = rc_ppm[0];	// copy previous state
+		s_ppm[1] = rc_ppm[1];
+		s_ppm[2] = rc_ppm[2];
+		s_ppm[3] = rc_ppm[3];
+		s_ppm[4] = rc_ppm[4];
+		s_ppm[5] = rc_ppm[5];
+		s_ppm[6] = rc_ppm[6];
+		s_ppm[7] = rc_ppm[7];
+	}
+	if(flags & (1 << FSMOD2)){	// Failsafe Mode 2
+		s_ppm[CH_MOD] = RC_RTH;	// RTH!
+	}
+	
 	delay(10);
-}
-
-void SerialEvent(){
 }
 
 ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
@@ -108,7 +131,9 @@ ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 	
 	counter = TCNT1;	// Get current time
 	TCNT1 = 0;	// Reset timer
-	flags &= ~(1 << 1);	// set good RC PPM Health flag
+	flags &= ~(1 << RCHLTH);	// set good RC PPM Health flag
+	flags &= ~(1 << FSMOD1);	// Clear FS mode
+	flags &= ~(1 << FSMOD2);	// Clear FS mode
 	if(counter < 1020){	// must be a pulse if less than 510 us
 		pulse = counter;
 	}else if(counter > 6000){	// sync pulses over 3000us
@@ -119,8 +144,14 @@ ISR(INT0_vect){	// Falling edge interrupt for RC_PPM
 	}
 }
 
+ISR(TIMER4_COMPA_vect){	// 3 seconds for failsafe 1
+	flags |= (1 << FSMOD2);	// set new mode
+	flags ^= (1 << FSMOD1);
+}
+
 ISR(TIMER1_OVF_vect){
-	flags |= (1 << 1);	// set bad RC PPM Health flag
+	flags |= (1 << RCHLTH) | (1 << FSMOD1);	// set bad RC PPM Health flag
+	TCCR4B |= (1 << CS42) | (1 << CS40);	// set watchdog timer on
 }
 
 ISR(TIMER3_COMPA_vect){
