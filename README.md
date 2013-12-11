@@ -10,6 +10,10 @@ CURRENT TODO
 
 CHANGELOG
 ---------
+12/10/13
+ * Added RC Channel Analysis logic (FailSafeboard)
+ ** If loss of signal for more than 3 seconds, RTH
+
 12/9/13
  * Add date to header section (FailSafeBoard)
  * Change int flags to char flags (FailSafeBoard)
